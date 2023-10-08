@@ -1,0 +1,1 @@
+added function to a_star_grid_2d class for findinng available cells in range(i.e, g_cost from start point to end point is known, so find all points that cost strictly less than or less than equal to g_cost to travell to) 

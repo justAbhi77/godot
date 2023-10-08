@@ -612,6 +612,8 @@ void AStarGrid2D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_point_path", "from_id", "to_id"), &AStarGrid2D::get_point_path);
 	ClassDB::bind_method(D_METHOD("get_id_path", "from_id", "to_id"), &AStarGrid2D::get_id_path);
 
+	ClassDB::bind_method(D_METHOD("get_id_path_range","from_id","rangeCost","costType"),&AStarGrid2D::get_id_path_range);
+
 	GDVIRTUAL_BIND(_estimate_cost, "from_id", "to_id")
 	GDVIRTUAL_BIND(_compute_cost, "from_id", "to_id")
 
@@ -636,6 +638,108 @@ void AStarGrid2D::_bind_methods() {
 	BIND_ENUM_CONSTANT(DIAGONAL_MODE_AT_LEAST_ONE_WALKABLE);
 	BIND_ENUM_CONSTANT(DIAGONAL_MODE_ONLY_IF_NO_OBSTACLES);
 	BIND_ENUM_CONSTANT(DIAGONAL_MODE_MAX);
+
+	BIND_ENUM_CONSTANT(LESS);
+	BIND_ENUM_CONSTANT(LESSOREQUAL);
+}
+
+bool AStarGrid2D::_solve_range(Point *p_begin_point, real_t cost, RangeCostType costType, LocalVector<Point *> *foundlist) {
+	pass++;
+
+	bool found_route = false;
+
+	LocalVector<Point *> open_list;
+	SortArray<Point *, SortPoints> sorter;
+
+	p_begin_point->g_score = 0;
+	p_begin_point->f_score = 0;
+	open_list.push_back(p_begin_point);
+
+	while (!open_list.is_empty()) {
+		Point *p = open_list[0]; // The currently processed point.
+
+		sorter.pop_heap(0, open_list.size(), open_list.ptr()); // Remove the current point from the open list.
+		open_list.remove_at(open_list.size() - 1);
+		p->closed_pass = pass; // Mark the point as closed.
+
+		if (costType == RangeCostType::LESS && p->g_score >= cost)
+			continue;
+		else if (costType == RangeCostType::LESSOREQUAL && p->g_score > cost)
+			continue;
+
+		foundlist->push_back(p);
+
+		LocalVector<Point *> nbors;
+		_get_nbors(p, nbors);
+
+		for (Point *e : nbors) {
+			real_t weight_scale = 1.0;
+
+			if (jumping_enabled) {
+				// TODO: Make it works with weight_scale.
+				e = _jump(p, e);
+				if (!e || e->closed_pass == pass) {
+					continue;
+				}
+			} else {
+				if (e->solid || e->closed_pass == pass) {
+					continue;
+				}
+				weight_scale = e->weight_scale;
+			}
+
+			real_t tentative_g_score = p->g_score + _compute_cost(p->id, e->id) * weight_scale;
+			bool new_point = false;
+
+			if (e->open_pass != pass) { // The point wasn't inside the open list.
+				e->open_pass = pass;
+				open_list.push_back(e);
+				new_point = true;
+			} else if (tentative_g_score >= e->g_score) { // The new path is worse than the previous.
+				continue;
+			}
+
+			e->prev_point = p;
+			e->g_score = tentative_g_score;
+
+			if (new_point) { // The position of the new points is already known.
+				sorter.push_heap(0, open_list.size() - 1, 0, e, open_list.ptr());
+			} else {
+				sorter.push_heap(0, open_list.find(e), 0, e, open_list.ptr());
+			}
+		}
+	}
+
+	if (!foundlist->is_empty())
+		found_route = true;
+
+	for(Point *e:*foundlist)
+		print_line(e->id);
+
+	return found_route;
+}
+
+TypedArray<Vector2i> AStarGrid2D::get_id_path_range(const Vector2i &p_from_id, real_t rangecost, RangeCostType costType) {
+	ERR_FAIL_COND_V_MSG(dirty, TypedArray<Vector2i>(), "Grid is not initialized. Call the update method.");
+	ERR_FAIL_COND_V_MSG(!is_in_boundsv(p_from_id), TypedArray<Vector2i>(), vformat("Can't get id path. Point %s out of bounds %s.", p_from_id, region));
+
+	Point *a = _get_point(p_from_id.x, p_from_id.y);
+
+	Point *begin_point = a;
+
+	LocalVector<Point *> foundlist;
+
+	bool found_route = _solve_range(begin_point, rangecost, costType, &foundlist);
+	if (!found_route) {
+		return TypedArray<Vector2i>();
+	}
+
+	TypedArray<Vector2i> path;
+	for (Point *p : foundlist) {
+		path.push_back(p->id);
+	}
+
+	return path;
 }
 
 #undef GET_POINT_UNCHECKED

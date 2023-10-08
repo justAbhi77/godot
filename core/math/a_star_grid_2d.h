@@ -57,6 +57,11 @@ public:
 		HEURISTIC_MAX,
 	};
 
+	enum RangeCostType {
+		LESS,
+		LESSOREQUAL,
+	};
+
 private:
 	Rect2i region;
 	Vector2 offset;
@@ -127,6 +132,7 @@ private: // Internal routines.
 	void _get_nbors(Point *p_point, LocalVector<Point *> &r_nbors);
 	Point *_jump(Point *p_from, Point *p_to);
 	bool _solve(Point *p_begin_point, Point *p_end_point);
+	bool _solve_range(Point *p_begin_point, real_t cost, RangeCostType costType, LocalVector<Point *> *found);
 
 protected:
 	static void _bind_methods();
@@ -182,9 +188,11 @@ public:
 	Vector2 get_point_position(const Vector2i &p_id) const;
 	Vector<Vector2> get_point_path(const Vector2i &p_from, const Vector2i &p_to);
 	TypedArray<Vector2i> get_id_path(const Vector2i &p_from, const Vector2i &p_to);
+	TypedArray<Vector2i> get_id_path_range(const Vector2i &p_from, real_t rangecost, RangeCostType costType);
 };
 
 VARIANT_ENUM_CAST(AStarGrid2D::DiagonalMode);
 VARIANT_ENUM_CAST(AStarGrid2D::Heuristic);
+VARIANT_ENUM_CAST(AStarGrid2D::RangeCostType);
 
 #endif // A_STAR_GRID_2D_H
